@@ -1,7 +1,31 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>React Basics</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Chatbot — Pink & Red</title>
+    <style>
+      :root{--bg:#fff0f6;--card:#ffd9e6;--accent:#ff2d6d;--accent-2:#ff7aa2;--text:#3b0b17}
+      html,body{height:100%;margin:0;font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;background:linear-gradient(180deg,#fff0f6 0%,#ffeef2 100%);color:var(--text)}
+      .app-wrap{display:flex;align-items:center;justify-content:center;padding:28px}
+      .chat-card{width:380px;max-width:96vw;background:var(--card);border-radius:16px;box-shadow:0 8px 30px rgba(203,47,89,0.12);overflow:hidden;border:1px solid rgba(255,45,109,0.08)}
+      .chat-header{padding:14px 16px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:white;font-weight:600}
+      .messages{height:420px;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:transparent}
+      .message{display:flex;align-items:flex-end;gap:8px;max-width:82%;}
+      .message.user{align-self:flex-end;flex-direction:row-reverse}
+      .bubble{padding:10px 12px;border-radius:14px;background:rgba(255,255,255,0.95);box-shadow:0 1px 0 rgba(0,0,0,0.03);color:var(--text)}
+      .message.user .bubble{background:linear-gradient(180deg,rgba(255,122,162,0.95),rgba(255,45,109,0.95));color:white}
+      .avatar{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;color:white}
+      .avatar.user{background:rgba(255,45,109,0.95)}
+      .avatar.robot{background:rgba(255,122,162,0.95)}
+      .input-row{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(0,0,0,0.03);background:transparent}
+      .input-row input{flex:1;padding:10px 12px;border-radius:10px;border:1px solid rgba(0,0,0,0.08);outline:none}
+      .input-row button{background:var(--accent);color:white;padding:10px 12px;border-radius:10px;border:none;cursor:pointer}
+      .typing{font-size:13px;color:rgba(0,0,0,0.5);padding-left:8px}
+      .meta{font-size:12px;color:rgba(0,0,0,0.45);padding:8px 12px}
+      ::-webkit-scrollbar{width:10px}
+      ::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--accent-2),var(--accent));border-radius:8px}
+    </style>
   </head>
   <body>
     <div class="js-container"></div>
@@ -12,16 +36,147 @@
 
     <script src="https://unpkg.com/supersimpledev/babel.js"></script>
     <script type="text/babel">
-
-    const paragraph = <p>Current time: {dayjs().format('HH:mm:ss')}</p>;
     const container = document.querySelector('.js-container');
-    const root=ReactDOM.createRoot(container);
-    root.render(paragraph);
-        setInterval(() => {
-          const paragraph = <p>Current time: {dayjs().format('HH:mm:ss')}</p>;
-          root.render(paragraph);
-      },1000);
+    const root = ReactDOM.createRoot(container);
+
+    function Clock() {
+      const [time, setTime] = React.useState(dayjs().format('HH:mm:ss'));
+      React.useEffect(() => {
+        const id = setInterval(() => setTime(dayjs().format('HH:mm:ss')), 1000);
+        return () => clearInterval(id);
+      }, []);
+      return <div className="meta">Current time: {time}</div>;
+    }
+
+    function ChatMessage({message, sender}){
+      return (
+        <div className={"message " + sender}>
+          <div className={"avatar " + sender}>{sender === 'user' ? 'U' : '🤖'}</div>
+          <div className="bubble">{message}</div>
+        </div>
+      );
+    }
+
+    function ChatMessages({chatMessages, loading}){
+      return (
+        <div className="messages" id="messages">
+          {chatMessages.map(m => (
+            <ChatMessage key={m.id} sender={m.sender} message={m.message} />
+          ))}
+          {loading && (
+            <div className="message robot">
+              <div className="avatar robot">🤖</div>
+              <div className="bubble">Typing<span style={{marginLeft:8}}>…</span></div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function useLocalStorageState(key, initial){
+      const [state, setState] = React.useState(() => {
+        try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : initial }catch(e){return initial}
+      });
+      React.useEffect(() => { try{ localStorage.setItem(key, JSON.stringify(state)) }catch(e){} }, [key, state]);
+      return [state, setState];
+    }
+
+    function App(){
+      const [chatMessages, setChatMessages] = useLocalStorageState('chat-history', [
+        {sender:'robot',message:'Hello — I am your pink assistant. Ask me anything!',id:'init-1'}
+      ]);
+      const [input, setInput] = React.useState('');
+      const [loading, setLoading] = React.useState(false);
+      const [waitingForBirthday, setWaitingForBirthday] = React.useState(null); // e.g. 'shreya'
+
+      React.useEffect(() => { // auto-scroll on messages change
+        const el = document.getElementById('messages'); if(el) el.scrollTop = el.scrollHeight;
+      }, [chatMessages, loading]);
+
+      function pushMessage(sender, message){
+        setChatMessages(prev => [...prev, {sender, message, id: crypto.randomUUID()}]);
+      }
+
+      function botResponseFor(text){
+        const t = text.toLowerCase();
+        // If the user identifies themself as Shreya ("I am Shreya", "I'm Shreya"), start birthday flow
+        if(/\b(i\s*'?m|i\s+am)\b.*\bshreya\b/i.test(text) || /\bshreya\b.*\b(i\s*'?m|i\s+am)\b/i.test(text)){
+          setWaitingForBirthday('shreya');
+          return "Nice to meet you, Shreya — please confirm your birthday.";
+        }
+        if(/weather|temperature/.test(t)) return "It's sunny and warm today ☀️";
+        if(/time|clock/.test(t)) return `The time is ${dayjs().format('HH:mm')}`;
+        if(/hello|hi|hey/.test(t)) return 'Hi there! How can I help you today?';
+        if(/help|assist/.test(t)) return 'Tell me what you need — I can give quick answers or suggestions.';
+        if(/joke/.test(t)) return "Why did the developer go broke? Because he used up all his cache. 😄";
+        // trigger birthday confirmation flow when user asks to confirm Shreya explicitly
+        if(/\bshreya\b/i.test(text) && /\bconfirm|verify|check\b/i.test(text)){
+          setWaitingForBirthday('shreya');
+          return "Sure — please confirm Shreya's birthday.";
+        }
+        return `You said: "${text}" — I can search, summarize, or answer small questions.`;
+      }
+
+      function isBirthdayMatch(text){
+        const cleaned = text.toLowerCase().replace(/(st|nd|rd|th)/g,'').replace(/,/g,'').trim();
+        const d = dayjs(cleaned);
+        if(!d.isValid()) return false;
+        return d.format('DD-MM-YYYY') === '28-02-2005';
+      }
+
+      function send(){
+        const text = input.trim(); if(!text) return;
+        pushMessage('user', text);
+        setInput('');
+
+        // special birthday flow
+        if(waitingForBirthday){
+          setLoading(true);
+          setTimeout(() => {
+            if(waitingForBirthday === 'shreya' && isBirthdayMatch(text)){
+              pushMessage('robot', 'Hello Shreya Pai');
+              pushMessage('robot', 'Maaz loves you');
+              setWaitingForBirthday(null);
+            } else {
+              pushMessage('robot', 'Verification failed.');
+              setWaitingForBirthday(null);
+            }
+            setLoading(false);
+          }, 600 + Math.random()*500);
+          return;
+        }
+
+        // normal flow
+        setLoading(true);
+        setTimeout(() => {
+          const reply = botResponseFor(text);
+          pushMessage('robot', reply);
+          setLoading(false);
+        }, 700 + Math.random()*600);
+      }
+
+      function onKey(e){ if(e.key === 'Enter') send(); }
+
+      return (
+        <div className="app-wrap">
+          <div className="chat-card">
+            <div className="chat-header">Pink & Red Chatbot</div>
+            <ChatMessages chatMessages={chatMessages} loading={loading} />
+            <div className="input-row">
+              <input aria-label="Message input" placeholder="Type a message and press Enter" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={onKey} />
+              <button onClick={send}>Send</button>
+            </div>
+            <Clock />
+          </div>
+        </div>
+      );
+    }
+          
       
+    
+
+    root.render(<App />);
+
     </script>
   </body>
 </html>
